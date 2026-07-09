@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+      xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0
+      http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name=""/>
+  <group name="General">
+    <entry name="showPercentText" type="Bool">
+      <label>Append a % sign after the number in the panel.</label>
+      <default>false</default>
+    </entry>
+    <entry name="showTimeLeft" type="Bool">
+      <label>Show time remaining in the 5-hour window in the panel.</label>
+      <default>true</default>
+    </entry>
+    <entry name="showWeekly" type="Bool">
+      <label>Show the weekly (7-day) limit in the popup.</label>
+      <default>true</default>
+    </entry>
+    <entry name="showScoped" type="Bool">
+      <label>Show the weekly model-scoped limit in the popup.</label>
+      <default>true</default>
+    </entry>
+    <entry name="refreshSeconds" type="Int">
+      <label>How often to poll Claude for updated usage, in seconds.</label>
+      <default>60</default>
+      <min>15</min>
+    </entry>
+  </group>
+</kcfg>

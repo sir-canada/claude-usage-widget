@@ -1,0 +1,23 @@
+[Unit]
+Description=Claude usage logger (allowance %% + local token counts -> SQLite)
+Documentation=file://%h/.local/share/claude-usage-daemon/daemon.py
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/.local/share/claude-usage-daemon/daemon.py
+Restart=on-failure
+RestartSec=15
+Nice=10
+# Light sandboxing: the daemon only needs HOME for reading creds/transcripts
+# and writing its DB + cache.
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=%h/.local/share/claude-usage %h/.cache/claude-usage
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=default.target

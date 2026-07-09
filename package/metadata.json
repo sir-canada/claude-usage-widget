@@ -1,0 +1,21 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Email": "sircanada2@gmail.com",
+                "Name": "sircanada2"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "Shows your Claude subscription usage: 5-hour session window, weekly and model-scoped limits, each with a live reset countdown.",
+        "EnabledByDefault": true,
+        "Icon": "office-chart-bar",
+        "Id": "org.sircanada.claudeusage",
+        "License": "MIT",
+        "Name": "Claude Usage",
+        "Version": "1.0.0",
+        "Website": "https://claude.ai"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0"
+}
