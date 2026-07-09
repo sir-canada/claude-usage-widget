@@ -24,22 +24,34 @@ Hover it for a popup with every limit and its reset time.
 
 ## Install
 
+One line — downloads the widget and daemon and installs both:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/sir-canada/claude-usage-widget/main/install.sh | bash
+```
+
+Then add it to a panel: right-click the panel → **Add Widgets…** → **Claude Usage**.
+
+> Piping a script from the internet into your shell runs it with your
+> permissions. Read [`install.sh`](install.sh) first if you'd rather not — it
+> only calls `kpackagetool6`, `systemctl --user`, and copies files under `~`.
+
+**Or from a checkout** (same script, uses the local files):
+
 ```sh
 git clone https://github.com/sir-canada/claude-usage-widget.git
 cd claude-usage-widget
 ./install.sh
 ```
 
-Then add it to a panel: right-click the panel → **Add Widgets…** → **Claude Usage**.
-
-To **upgrade** later, `git pull` and run `./install.sh` again. If the widget was
-already on your panel, Plasma caches the old code — reload it with
+Re-run the same command any time to **upgrade**. If the widget was already on
+your panel, Plasma caches the old code — reload it with
 `systemctl --user restart plasma-plasmashell.service`.
 
-**Widget-only mode:** `./install.sh --no-daemon` installs just the widget. It
-works, but without the daemon the widget queries the usage endpoint directly on
-every refresh (hitting rate limits more often) and keeps no history. The daemon
-is recommended.
+**Widget-only mode:** add `--no-daemon` to install just the widget (curl form:
+`... | bash -s -- --no-daemon`). It works, but without the daemon the widget
+queries the usage endpoint directly on every refresh — hitting rate limits more
+often and keeping no history. The daemon is recommended.
 
 ## Uninstall
 

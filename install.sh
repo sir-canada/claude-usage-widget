@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Install (or upgrade) the Claude Usage plasmoid and its polling daemon.
 #
+# One-line install (downloads the repo, then runs this):
+#   curl -fsSL https://raw.githubusercontent.com/sir-canada/claude-usage-widget/main/install.sh | bash
+#   curl -fsSL .../install.sh | bash -s -- --no-daemon   # widget only
+#
+# From a checkout:
 #   ./install.sh              install/upgrade widget + daemon
 #   ./install.sh --no-daemon  install/upgrade the widget only (degraded mode)
 #
 set -euo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_TARBALL="https://github.com/sir-canada/claude-usage-widget/archive/refs/heads/main.tar.gz"
 PLUGIN_ID="org.sircanada.claudeusage"
 WANT_DAEMON=1
 
@@ -19,6 +24,32 @@ for arg in "$@"; do
         *) echo "Unknown option: $arg" >&2; exit 2 ;;
     esac
 done
+
+# --- Locate the payload ------------------------------------------------------
+# When run from a checkout, the package/ and daemon/ dirs sit next to this
+# script. When piped from curl (curl ... | bash) there are no local files, so
+# download the repo tarball into a temp dir and continue from there.
+SELF="${BASH_SOURCE[0]:-}"
+if [ -n "$SELF" ] && [ -f "$SELF" ]; then
+    DIR="$(cd "$(dirname "$SELF")" && pwd)"
+else
+    DIR=""
+fi
+
+if [ -z "$DIR" ] || [ ! -d "$DIR/package" ]; then
+    echo "Downloading claude-usage-widget ..."
+    command -v tar >/dev/null 2>&1 || { echo "ERROR: 'tar' is required." >&2; exit 1; }
+    fetch() {
+        if command -v curl >/dev/null 2>&1; then curl -fsSL "$1"
+        elif command -v wget >/dev/null 2>&1; then wget -qO- "$1"
+        else echo "ERROR: need 'curl' or 'wget' to download." >&2; exit 1; fi
+    }
+    TMP="$(mktemp -d)"
+    trap 'rm -rf "$TMP"' EXIT
+    fetch "$REPO_TARBALL" | tar -xz -C "$TMP"
+    DIR="$(echo "$TMP"/claude-usage-widget-*)"
+    [ -d "$DIR/package" ] || { echo "ERROR: download looks incomplete (no package/)." >&2; exit 1; }
+fi
 
 # --- Preflight ---------------------------------------------------------------
 need() { command -v "$1" >/dev/null 2>&1 || { echo "ERROR: '$1' not found. $2" >&2; exit 1; }; }
