@@ -3,8 +3,7 @@
     "KPlugin": {
         "Authors": [
             {
-                "Email": "sircanada2@gmail.com",
-                "Name": "sircanada2"
+                "Name": "sir-canada"
             }
         ],
         "Category": "System Information",
@@ -14,8 +13,8 @@
         "Id": "org.sircanada.claudeusage",
         "License": "MIT",
         "Name": "Claude Usage",
-        "Version": "1.0.0",
-        "Website": "https://claude.ai"
+        "Version": "1.1.0",
+        "Website": "https://github.com/sir-canada/claude-usage-widget"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

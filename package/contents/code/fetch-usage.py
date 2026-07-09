@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch Claude subscription usage for the Noctalia claude-usage plugin.
+"""Fetch Claude subscription usage for the Claude Usage plasmoid.
 Prints a single normalized JSON line to stdout. Never prints the token.
 Deliberately does NOT perform OAuth refresh (to avoid rotating the refresh
 token and disrupting the user's Claude Code login); when the access token is
@@ -76,7 +76,7 @@ def main():
         "Authorization": "Bearer " + token,
         "anthropic-beta": "oauth-2025-04-20",
         "anthropic-version": "2023-06-01",
-        "User-Agent": "noctalia-claude-usage/1.0",
+        "User-Agent": "claude-usage-widget/1.1",
         "Accept": "application/json",
     })
     try:

@@ -20,7 +20,7 @@ MouseArea {
 
     hoverEnabled: true
 
-    // Hover opens the popup (Noctalia-style); moving away closes it after a
+    // Hover opens the popup; moving away closes it after a
     // short grace period unless the pointer moved into the popup itself.
     onContainsMouseChanged: {
         root.compactHovered = containsMouse;

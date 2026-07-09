@@ -8,7 +8,7 @@ import "utils.js" as Utils
 PlasmoidItem {
     id: root
 
-    // ---- usage data (same shape as the Noctalia UsageData component) ----
+    // ---- usage data (same normalized shape read-usage.py emits) ----
     property bool ready: false        // a fetch has completed at least once
     property bool ok: false           // last fetch produced usable data
     property bool stale: false        // data came from cache (network/token issue)
