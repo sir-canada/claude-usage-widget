@@ -8,12 +8,6 @@ The panel icon shows your 5-hour usage percentage (green → amber → red) and,
 you get close to the limit, a battery-style fill bar and an attention badge.
 Hover it for a popup with every limit and its reset time.
 
-![panel](screenshots/panel.png)
-![popup](screenshots/popup.png)
-
-> Screenshots not added yet — capture the tray icon and the hover popup with
-> Spectacle and drop them in `screenshots/` as `panel.png` and `popup.png`.
-
 ## Requirements
 
 - **KDE Plasma 6** (the widget uses KF6 APIs; it will not run on Plasma 5)
