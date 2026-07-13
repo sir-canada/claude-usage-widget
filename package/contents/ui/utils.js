@@ -13,6 +13,18 @@ function fmtDuration(sec) {
   return m + "m";
 }
 
+// Bare age for the footer's "Updated <i>76s</i> ago" line. Exact seconds is
+// the point here — the daemon polls every ~110s, so "1m" would hide whether
+// the data is 61s or 119s old. Stays in seconds for the first hour.
+function fmtAge(sec) {
+  if (sec === null || sec === undefined || isNaN(sec)) return "—";
+  sec = Math.max(0, Math.floor(sec));
+  if (sec < 3600) return sec + "s";
+  var h = Math.floor(sec / 3600);
+  if (h < 24) return h + "h";
+  return Math.floor(h / 24) + "d";
+}
+
 // "just now", "42s ago", "3m ago", "2h ago", "1d ago"
 function fmtAgo(sec) {
   if (sec === null || sec === undefined || isNaN(sec)) return "";

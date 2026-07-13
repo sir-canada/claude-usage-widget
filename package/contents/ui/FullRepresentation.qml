@@ -56,9 +56,20 @@ PlasmaExtras.Representation {
     }
     Component.onCompleted: revealTimer.start()
 
+    // Height must include the header bar, or the bottom of the content — the
+    // "Updated Xs ago" footer — gets clipped past the popup edge.
+    //
+    // minimumHeight matters as much as preferredHeight: Plasma persists the
+    // popup's dialog size per-applet (popupHeight in appletsrc) and that saved
+    // value overrides preferredHeight. Without a floor, a stale/short saved
+    // size silently crops the footer forever.
+    readonly property real wantedHeight: (header ? header.implicitHeight : 0)
+                                         + contentColumn.implicitHeight
+                                         + Kirigami.Units.largeSpacing * 2
+
     Layout.preferredWidth: Kirigami.Units.gridUnit * 20
-    Layout.preferredHeight: Math.max(contentColumn.implicitHeight + Kirigami.Units.largeSpacing * 2,
-                                     Kirigami.Units.gridUnit * 11)
+    Layout.preferredHeight: Math.max(wantedHeight, Kirigami.Units.gridUnit * 12)
+    Layout.minimumHeight: Math.max(wantedHeight, Kirigami.Units.gridUnit * 12)
     Layout.minimumWidth: Kirigami.Units.gridUnit * 16
     Layout.maximumWidth: Kirigami.Units.gridUnit * 24
 
@@ -177,9 +188,11 @@ PlasmaExtras.Representation {
             }
         }
 
-        Item { Layout.fillHeight: true }
+        // No flexible spacer here: the popup is sized to its content, so a
+        // fillHeight Item adds nothing but an extra ColumnLayout spacing gap
+        // above the separator.
 
-        // Footer: hairline + live "updated" line + cached chip.
+        // Footer: hairline + "updated" line + cached chip.
         Kirigami.Separator { Layout.fillWidth: true }
 
         RowLayout {
@@ -188,14 +201,25 @@ PlasmaExtras.Representation {
 
             PlasmaComponents3.Label {
                 Layout.fillWidth: true
-                // Absolute clock time of the last successful fetch, plus a
-                // live "x ago" so it's readable at a glance either way.
+                // Exact age of the data in seconds, plus when the daemon polls
+                // next (it publishes next_poll, so this follows its real
+                // cadence and backoff). Both are snapshots taken when the popup
+                // opens / new data lands — not a live per-second stopwatch.
+                // When showing cached/stale data this line goes full-opacity so
+                // the age — not just the dimmed gauges — explains itself.
+                readonly property string nextText: root.nextPoll > 0
+                      ? (root.nextPoll > root.nowSec
+                         ? i18n("next in <i>%1</i>", Utils.fmtAge(root.nextPoll - root.nowSec))
+                         : i18n("next due now"))
+                      : ""
+                textFormat: Text.StyledText
                 text: root.updated > 0
-                      ? i18n("Updated %1 · %2",
-                             new Date(root.updated * 1000).toLocaleTimeString(Qt.locale(), Locale.ShortFormat),
-                             Utils.fmtAgo(root.nowSec - root.updated))
-                      : i18n("Updated %1", Utils.fmtAgo(root.nowSec - (root.updated || root.nowSec)))
-                opacity: 0.7
+                      ? i18n("Updated <i>%1</i> ago", Utils.fmtAge(root.nowSec - root.updated))
+                        + (nextText ? " · " + nextText : "")
+                      : i18n("Updated —")
+                color: full.cachedView ? Kirigami.Theme.neutralTextColor
+                                       : Kirigami.Theme.textColor
+                opacity: full.cachedView ? 1.0 : 0.7
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
             }
 

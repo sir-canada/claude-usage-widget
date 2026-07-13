@@ -15,6 +15,7 @@ PlasmoidItem {
     property string state: "loading"  // loading | ok | offline | expired | noauth | error
     property string plan: ""
     property double updated: 0
+    property double nextPoll: 0       // epoch of the daemon's next API poll
     property var items: []
     property bool fetching: false
 
@@ -143,8 +144,13 @@ PlasmoidItem {
             state = d.state || (d.ok ? "ok" : "error");
             plan = d.plan || "";
             updated = newUpdated;
-            if (sampleChanged)
+            nextPoll = d.next_poll || 0;
+            if (sampleChanged) {
                 items = newItems;
+                // Re-anchor the footer's "updated X ago" to the moment fresh
+                // poll data actually landed, so the age it shows is real.
+                nowSec = Date.now() / 1000;
+            }
         } catch (e) {
             ok = false;
             state = "error";
@@ -165,7 +171,9 @@ PlasmoidItem {
     }
 
     // Keeps countdowns fresh between fetches; only ticks while something
-    // that shows a countdown is on screen.
+    // that shows a countdown is on screen. Deliberately NOT a 1s tick: the
+    // footer's age is a snapshot taken when the popup opens / new data lands,
+    // not a live stopwatch counting up in your face.
     Timer {
         interval: 30000
         running: root.expanded || plasmoid.configuration.showTimeLeft
