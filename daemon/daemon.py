@@ -29,7 +29,7 @@ DB = os.path.join(HOME, ".local", "share", "claude-usage", "usage.db")
 CACHE_DIR = os.path.join(HOME, ".cache", "claude-usage")
 LATEST = os.path.join(CACHE_DIR, "latest.json")
 URL = "https://api.anthropic.com/api/oauth/usage"
-POLL = int(os.environ.get("CLAUDE_USAGE_POLL", "60"))
+POLL = int(os.environ.get("CLAUDE_USAGE_POLL", "110"))
 
 
 # ----------------------------------------------------------------------------
@@ -119,7 +119,11 @@ def poll_allowance(creds):
         with urllib.request.urlopen(req, timeout=15) as r:
             data = json.loads(r.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        return None, {"state": "ratelimited" if e.code == 429 else "error"}
+        info = {"state": "ratelimited" if e.code == 429 else "error"}
+        ra = e.headers.get("Retry-After") if e.headers else None
+        if ra:
+            info["retry_after"] = ra
+        return None, info
     except Exception:
         return None, {"state": "offline"}
 
@@ -315,15 +319,19 @@ def tick(con):
         sample, latest = poll_allowance(creds)
         if sample:
             insert_sample(con, sample)
-            write_latest(latest)
             _backoff = POLL
             _next_poll = now + POLL
+            # Publish when we'll poll again so the widget can show "next in Xs"
+            # instead of hardcoding (and drifting from) our cadence.
+            latest["next_poll"] = int(_next_poll)
+            write_latest(latest)
             status = "ok"
         else:
             st = (latest or {}).get("state")
             if st == "ratelimited":
                 _backoff = min(_backoff * 2, MAX_BACKOFF)
-                status = f"429 backoff→{_backoff}s"
+                ra = (latest or {}).get("retry_after")
+                status = f"429 backoff→{_backoff}s" + (f" retry-after={ra}" if ra else "")
             else:
                 _backoff = POLL
                 status = st or "skip"

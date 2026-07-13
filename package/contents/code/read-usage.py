@@ -14,7 +14,9 @@ HOME = os.path.expanduser("~")
 LATEST = os.path.join(HOME, ".cache", "claude-usage", "latest.json")
 FETCH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fetch-usage.py")
 # Past this the widget footer says "updated Xm ago" but the data is still shown.
-FRESH_SEC = 150
+# Daemon polls every ~110s (endpoint allows ~3 req/300s); 250s tolerates one
+# delayed poll without flagging stale.
+FRESH_SEC = 250
 
 
 def recompute_resets(obj):
