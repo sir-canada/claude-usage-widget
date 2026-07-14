@@ -3,3 +3,6 @@ __pycache__/
 *.qmlc
 *.jsc
 .directory
+
+# Local working notes (machine-specific paths / applet ids)
+context.md
