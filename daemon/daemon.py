@@ -29,7 +29,20 @@ DB = os.path.join(HOME, ".local", "share", "claude-usage", "usage.db")
 CACHE_DIR = os.path.join(HOME, ".cache", "claude-usage")
 LATEST = os.path.join(CACHE_DIR, "latest.json")
 URL = "https://api.anthropic.com/api/oauth/usage"
-POLL = int(os.environ.get("CLAUDE_USAGE_POLL", "110"))
+# Poll cadence. The endpoint rate-limits usage checks, and the real limit is
+# tighter than the naive "3 req / 300s" reading (which would allow one per 100s).
+#
+# Measured, not guessed: at POLL=110 the daemon drew a 429 every 1985s — dead
+# regular, 18 polls, three times running. Across that cycle 17 requests got
+# through in 1985s, i.e. the server sustained exactly **one request per ~117s**.
+# That's a token bucket refilling at ~1/117s: any cadence faster than the refill
+# rate drains it slowly, then 429s, backs off, refills, repeats. The long regular
+# period is the drain time, not a coincidence. 115s still drained (429 after ~15
+# polls), which is consistent — it's under 117 too.
+#
+# 125s sits ~7% above the measured refill rate. The cost is nothing: 10s of extra
+# data age against a 5-hour quota window.
+POLL = int(os.environ.get("CLAUDE_USAGE_POLL", "125"))
 
 
 # ----------------------------------------------------------------------------
