@@ -63,22 +63,47 @@ PlasmaExtras.Representation {
     // popup's dialog size per-applet (popupHeight in appletsrc) and that saved
     // value overrides preferredHeight. Without a floor, a stale/short saved
     // size silently crops the footer forever.
+    // The header bar already provides visual separation, so the content needs
+    // almost no top margin of its own — a full largeSpacing there just reads as
+    // dead space under the title.
+    readonly property real contentTopMargin: Math.round(Kirigami.Units.smallSpacing / 2)
+    readonly property real contentBottomMargin: Kirigami.Units.largeSpacing
+
     readonly property real wantedHeight: (header ? header.implicitHeight : 0)
                                          + contentColumn.implicitHeight
-                                         + Kirigami.Units.largeSpacing * 2
+                                         + contentTopMargin + contentBottomMargin
+
+    // Pin the height to the content, hard: min == preferred == max.
+    //
+    // Plasma persists the popup's dialog size per-applet (popupHeight in
+    // appletsrc) and replays it over preferredHeight on load. Any layout change
+    // we make would otherwise be fought by a height saved from the *previous*
+    // layout — cropping the footer if the saved value is short, padding dead
+    // space at the bottom if it's tall. Clamping min and max to the same value
+    // leaves the saved size nothing to override, so the popup is always exactly
+    // as tall as what's in it.
+    readonly property real lockedHeight: Math.max(wantedHeight,
+                                                  Kirigami.Units.gridUnit * 12)
 
     Layout.preferredWidth: Kirigami.Units.gridUnit * 20
-    Layout.preferredHeight: Math.max(wantedHeight, Kirigami.Units.gridUnit * 12)
-    Layout.minimumHeight: Math.max(wantedHeight, Kirigami.Units.gridUnit * 12)
+    Layout.preferredHeight: lockedHeight
+    Layout.minimumHeight: lockedHeight
+    Layout.maximumHeight: lockedHeight
     Layout.minimumWidth: Kirigami.Units.gridUnit * 16
     Layout.maximumWidth: Kirigami.Units.gridUnit * 24
 
     collapseMarginsHint: true
 
+    // No refresh button: the widget reads the daemon's cache every 5s and the
+    // footer states the data's exact age and when the next poll lands. A manual
+    // refresh would re-read the same file and change nothing — the API cadence
+    // is the daemon's to own, and it's rate-limited besides. (Right-click still
+    // offers "Refresh Now" for the rare case where it helps.)
     header: PlasmaExtras.PlasmoidHeading {
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: Kirigami.Units.smallSpacing
+            anchors.rightMargin: Kirigami.Units.smallSpacing
             spacing: Kirigami.Units.smallSpacing
 
             Kirigami.Heading {
@@ -102,34 +127,6 @@ PlasmaExtras.Representation {
                     text: root.plan
                     color: Kirigami.Theme.highlightColor
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
-                }
-            }
-
-            PlasmaComponents3.ToolButton {
-                id: refreshButton
-                icon.name: "view-refresh"
-                enabled: !root.fetching
-                display: PlasmaComponents3.AbstractButton.IconOnly
-                text: i18n("Refresh")
-                onClicked: root.refresh()
-
-                PlasmaComponents3.ToolTip.text: text
-                PlasmaComponents3.ToolTip.visible: hovered
-
-                RotationAnimation on rotation {
-                    running: root.fetching
-                    loops: Animation.Infinite
-                    from: 0
-                    to: 360
-                    duration: 900
-                }
-                // Settle back upright when the fetch finishes.
-                RotationAnimation on rotation {
-                    running: !root.fetching && refreshButton.rotation !== 0
-                    to: 360
-                    duration: 300
-                    easing.type: Easing.OutCubic
-                    onFinished: refreshButton.rotation = 0
                 }
             }
         }
@@ -157,7 +154,13 @@ PlasmaExtras.Representation {
         visible: root.ready && full.showRows
         anchors.fill: parent
         anchors.margins: Kirigami.Units.largeSpacing
-        spacing: Kirigami.Units.largeSpacing
+        anchors.topMargin: full.contentTopMargin
+        anchors.bottomMargin: full.contentBottomMargin
+
+        // Gap *between* metric blocks. Each block already ends in its own reset
+        // line, which carries plenty of visual air — a largeSpacing on top of
+        // that just stretched the popup with nothing in it.
+        spacing: Kirigami.Units.smallSpacing
 
         // Inline notice when showing cached values (token expired / offline).
         Kirigami.InlineMessage {
@@ -168,22 +171,25 @@ PlasmaExtras.Representation {
         }
 
         Repeater {
-            model: root.popupItems
-            delegate: MetricDelegate {
+            model: root.popupGroups
+            delegate: MetricGroup {
                 required property var modelData
                 required property int index
+
                 Layout.fillWidth: true
-                metric: modelData
-                primary: modelData.key === "5h"
+                groupItems: modelData.items
+                resetEpoch: modelData.resets
                 dimmed: full.cachedView
                 revealed: full.revealed
+                showSeparator: index > 0
 
-                // Staggered reveal: each row starts a beat after the last.
-                Behavior on revealed {
-                    SequentialAnimation {
-                        PauseAnimation { duration: index * 60 }
-                        PropertyAction {}
-                    }
+                // Staggered reveal: each bar starts a beat after the last,
+                // counting across groups so the cascade doesn't restart.
+                staggerBase: {
+                    var n = 0;
+                    for (var i = 0; i < index; i++)
+                        n += root.popupGroups[i].items.length;
+                    return n;
                 }
             }
         }
@@ -193,14 +199,40 @@ PlasmaExtras.Representation {
         // above the separator.
 
         // Footer: hairline + "updated" line + cached chip.
-        Kirigami.Separator { Layout.fillWidth: true }
+        Kirigami.Separator {
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.smallSpacing
+        }
 
+        // Chip on the left, timing text right-aligned — so the footer's metadata
+        // lines up with the reset lines above it, all flush to the right edge.
         RowLayout {
             Layout.fillWidth: true
             spacing: Kirigami.Units.smallSpacing
 
+            Rectangle {
+                visible: full.cachedView
+                radius: height / 2
+                color: Qt.alpha(Kirigami.Theme.neutralTextColor, 0.15)
+                implicitHeight: cachedLabel.implicitHeight + Kirigami.Units.smallSpacing
+                implicitWidth: cachedLabel.implicitWidth + Kirigami.Units.largeSpacing
+
+                PlasmaComponents3.Label {
+                    id: cachedLabel
+                    anchors.centerIn: parent
+                    text: i18n("cached")
+                    color: Kirigami.Theme.neutralTextColor
+                    font.pointSize: Kirigami.Theme.smallFont.pointSize
+                }
+            }
+
             PlasmaComponents3.Label {
+                // fillWidth + AlignRight (not Layout.alignment) so this label
+                // eats the slack in the row: it stays pinned right whether or
+                // not the chip is there to push it.
                 Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+
                 // Exact age of the data in seconds, plus when the daemon polls
                 // next (it publishes next_poll, so this follows its real
                 // cadence and backoff). Both are snapshots taken when the popup
@@ -221,22 +253,6 @@ PlasmaExtras.Representation {
                                        : Kirigami.Theme.textColor
                 opacity: full.cachedView ? 1.0 : 0.7
                 font.pointSize: Kirigami.Theme.smallFont.pointSize
-            }
-
-            Rectangle {
-                visible: full.cachedView
-                radius: height / 2
-                color: Qt.alpha(Kirigami.Theme.neutralTextColor, 0.15)
-                implicitHeight: cachedLabel.implicitHeight + Kirigami.Units.smallSpacing
-                implicitWidth: cachedLabel.implicitWidth + Kirigami.Units.largeSpacing
-
-                PlasmaComponents3.Label {
-                    id: cachedLabel
-                    anchors.centerIn: parent
-                    text: i18n("cached")
-                    color: Kirigami.Theme.neutralTextColor
-                    font.pointSize: Kirigami.Theme.smallFont.pointSize
-                }
             }
         }
     }

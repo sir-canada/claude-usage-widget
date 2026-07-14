@@ -19,7 +19,28 @@ PlasmoidItem {
     property var items: []
     property bool fetching: false
 
+    // Two clocks on purpose:
+    //   nowSec  - snapshot, re-anchored when the popup opens / new data lands.
+    //             Drives the footer's "Updated Xs ago" (a stopwatch there would
+    //             be noise).
+    //   tickSec - the countdown clock. Ticks 1s while a reset is imminent so
+    //             the last 90s counts down for real, 30s otherwise.
     property double nowSec: Date.now() / 1000
+    property double tickSec: Date.now() / 1000
+
+    readonly property bool resetImminent: {
+        for (var i = 0; i < items.length; i++) {
+            var e = items[i].resets_epoch;
+            if (!e)
+                continue;
+            var left = e - tickSec;
+            // Lower bound: once a reset is well past due the daemon just hasn't
+            // repolled yet — don't spin at 1Hz forever waiting for it.
+            if (left < Utils.IMMINENT_SEC && left > -30)
+                return true;
+        }
+        return false;
+    }
 
     // Hover-to-open popup (replaces the plain-text panel tooltip).
     // Clicking pins the popup open so the refresh button can be reached.
@@ -58,6 +79,30 @@ PlasmoidItem {
             out.push(it);
         }
         return out;
+    }
+
+    // Metrics that reset at the same instant are drawn as one block with a
+    // single "Resets in ..." line, instead of repeating the same countdown
+    // under every bar. Today the two weekly rows always share an epoch (to the
+    // same second) — but this checks rather than assumes: if Anthropic ever
+    // staggers them, they fall back to separate rows with their own countdowns.
+    readonly property var popupGroups: {
+        var src = popupItems;
+        var groups = [];
+        var i = 0;
+        while (i < src.length) {
+            var head = src[i];
+            var g = { items: [head], resets: head.resets_epoch || 0 };
+            var j = i + 1;
+            while (j < src.length && head.resets_epoch && src[j].resets_epoch
+                   && Math.abs(src[j].resets_epoch - head.resets_epoch) <= 60) {
+                g.items.push(src[j]);
+                j++;
+            }
+            groups.push(g);
+            i = j;
+        }
+        return groups;
     }
 
     function metricLabel(item) {
@@ -113,12 +158,14 @@ PlasmoidItem {
 
     // Reading the daemon's local cache is free (no network), so always reflect
     // the latest on open.
+    // root.expanded, not a bare `expanded`: the latter binds to the signal's
+    // injected parameter, which Qt6 deprecates (and warns about on every load).
     onExpandedChanged: {
-        if (expanded) {
-            nowSec = Date.now() / 1000;
-            refresh();
+        if (root.expanded) {
+            root.nowSec = Date.now() / 1000;
+            root.refresh();
         } else {
-            pinned = false;
+            root.pinned = false;
         }
     }
 
@@ -170,13 +217,22 @@ PlasmoidItem {
         onTriggered: root.refresh()
     }
 
-    // Keeps countdowns fresh between fetches; only ticks while something
-    // that shows a countdown is on screen. Deliberately NOT a 1s tick: the
-    // footer's age is a snapshot taken when the popup opens / new data lands,
-    // not a live stopwatch counting up in your face.
+    // Keeps countdowns fresh between fetches; only runs while something that
+    // shows a countdown is on screen. Goes to 1Hz for the final 90s before a
+    // reset (and back to 30s after), so the panel/popup tick down to the second
+    // exactly when that's the number you care about — and idle the rest of the
+    // time.
+    Timer {
+        interval: root.resetImminent ? 1000 : 30000
+        running: root.expanded || plasmoid.configuration.showTimeLeft
+        repeat: true
+        onTriggered: root.tickSec = Date.now() / 1000
+    }
+
+    // The footer's age clock: coarse, and re-anchored on open / on fresh data.
     Timer {
         interval: 30000
-        running: root.expanded || plasmoid.configuration.showTimeLeft
+        running: root.expanded
         repeat: true
         onTriggered: root.nowSec = Date.now() / 1000
     }

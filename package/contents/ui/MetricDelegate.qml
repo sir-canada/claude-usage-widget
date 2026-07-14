@@ -2,9 +2,10 @@ import QtQuick
 import QtQuick.Layouts
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
-import "utils.js" as Utils
 
-// One usage metric: label + %, gauge, reset countdown.
+// One usage metric: label + %, gauge. The reset countdown lives on MetricGroup,
+// which owns it for the whole block — metrics that reset together shouldn't each
+// print the same countdown.
 ColumnLayout {
     id: row
 
@@ -44,15 +45,5 @@ ColumnLayout {
         fillColor: row.pctColor
         revealed: row.revealed
         dimmed: row.dimmed
-    }
-
-    PlasmaComponents3.Label {
-        visible: !!(row.metric && row.metric.resets_epoch)
-        text: row.metric && row.metric.resets_epoch
-              ? i18n("Resets in %1", Utils.fmtDuration(row.metric.resets_epoch - root.nowSec))
-              : ""
-        opacity: 0.7
-        font.pointSize: Kirigami.Theme.smallFont.pointSize
-        font.features: ({ "tnum": 1 })
     }
 }

@@ -60,7 +60,7 @@ MouseArea {
         PlasmaComponents3.Label {
             visible: compact.hasData && plasmoid.configuration.showTimeLeft && !!(compact.fh && compact.fh.resets_epoch) && !compact.vertical
             Layout.alignment: Qt.AlignHCenter
-            text: compact.fh && compact.fh.resets_epoch ? Utils.fmtDuration(compact.fh.resets_epoch - root.nowSec) : ""
+            text: compact.fh && compact.fh.resets_epoch ? Utils.fmtDuration(compact.fh.resets_epoch - root.tickSec) : ""
             opacity: 0.7
             font.pointSize: Kirigami.Theme.smallFont.pointSize * 0.85
             font.features: ({ "tnum": 1 })

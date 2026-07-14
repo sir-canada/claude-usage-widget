@@ -1,16 +1,33 @@
 .pragma library
 
-// Compact "time until reset" -> "3d21h", "4h59m", "7m", "now", "—"
+// How close a reset has to be before we count it down second-by-second.
+var IMMINENT_SEC = 90;
+
+// Compact "time until reset" -> "3d21h", "4h59m", "7m", "47s", "—"
+//
+// Under IMMINENT_SEC we drop to bare seconds: the reset epoch is precise to
+// the sub-second, and "now"/"1m" is a useless thing to stare at while you're
+// waiting for the quota to come back. Callers pair this with a 1s tick so the
+// last minute and a half actually ticks.
 function fmtDuration(sec) {
   if (sec === null || sec === undefined || isNaN(sec)) return "—";
   sec = Math.max(0, Math.floor(sec));
-  if (sec < 60) return "now";
+  if (sec < IMMINENT_SEC) return sec + "s";
   var m = Math.floor(sec / 60);
   var h = Math.floor(m / 60);
   var d = Math.floor(h / 24);
   if (d > 0) return d + "d" + (h % 24) + "h";
   if (h > 0) return h + "h" + (m % 60) + "m";
   return m + "m";
+}
+
+// Wall-clock time the reset lands. Far out (>24h) it needs the day to mean
+// anything -> "Mon Jul 20, 18:59"; today/tonight the clock alone is clearer
+// -> "22:59".
+function fmtResetWhen(epoch, remainSec) {
+  if (!epoch) return "";
+  var dt = new Date(epoch * 1000);
+  return Qt.formatDateTime(dt, remainSec > 86400 ? "ddd MMM d, HH:mm" : "HH:mm");
 }
 
 // Bare age for the footer's "Updated <i>76s</i> ago" line. Exact seconds is
