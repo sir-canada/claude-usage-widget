@@ -42,6 +42,20 @@ function fmtAge(sec) {
   return Math.floor(h / 24) + "d";
 }
 
+// Idle-for badge on session rows -> "1d3h", "2h14m", "34m". Empty under a
+// minute: too fresh to matter, and hiding it avoids a flickery "0m".
+function fmtIdle(sec) {
+  if (sec === null || sec === undefined || isNaN(sec)) return "";
+  sec = Math.max(0, Math.floor(sec));
+  var m = Math.floor(sec / 60);
+  if (m < 1) return "";
+  var h = Math.floor(m / 60);
+  var d = Math.floor(h / 24);
+  if (d > 0) return d + "d" + (h % 24) + "h";
+  if (h > 0) return h + "h" + (m % 60) + "m";
+  return m + "m";
+}
+
 // "just now", "42s ago", "3m ago", "2h ago", "1d ago"
 function fmtAgo(sec) {
   if (sec === null || sec === undefined || isNaN(sec)) return "";

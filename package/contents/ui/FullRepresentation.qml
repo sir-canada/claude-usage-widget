@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Window
 import org.kde.kirigami as Kirigami
 import org.kde.plasma.components as PlasmaComponents3
 import org.kde.plasma.extras as PlasmaExtras
@@ -82,8 +83,16 @@ PlasmaExtras.Representation {
     // space at the bottom if it's tall. Clamping min and max to the same value
     // leaves the saved size nothing to override, so the popup is always exactly
     // as tall as what's in it.
-    readonly property real lockedHeight: Math.max(wantedHeight,
-                                                  Kirigami.Units.gridUnit * 12)
+    //
+    // …up to the screen. The sessions list can make the natural height taller
+    // than the display; past the cap the list scrolls instead of the popup
+    // growing off-screen. (Screen here is the popup dialog's own screen.)
+    readonly property real screenCap: Screen.desktopAvailableHeight > 0
+                                      ? Screen.desktopAvailableHeight - Kirigami.Units.gridUnit * 3
+                                      : Number.MAX_VALUE
+    readonly property real lockedHeight: Math.min(Math.max(wantedHeight,
+                                                           Kirigami.Units.gridUnit * 12),
+                                                  screenCap)
 
     Layout.preferredWidth: Kirigami.Units.gridUnit * 20
     Layout.preferredHeight: lockedHeight
@@ -129,6 +138,32 @@ PlasmaExtras.Representation {
                     font.pointSize: Kirigami.Theme.smallFont.pointSize
                 }
             }
+
+            // Direct path to the settings dialog: the context-menu route was
+            // unreliable while the widget refreshed, and the popup is already
+            // under the pointer anyway.
+            PlasmaComponents3.ToolButton {
+                icon.name: "configure"
+                text: i18n("Configure…")
+                display: PlasmaComponents3.AbstractButton.IconOnly
+                onClicked: {
+                    root.pinned = false;
+                    root.expanded = false;
+                    Plasmoid.internalAction("configure").trigger();
+                }
+            }
+
+            PlasmaComponents3.ToolButton {
+                icon.name: "window-close"
+                text: i18n("Close")
+                display: PlasmaComponents3.AbstractButton.IconOnly
+                onClicked: {
+                    root.pinned = false;
+                    root.popupHovered = false;
+                    root.compactHovered = false;
+                    root.expanded = false;
+                }
+            }
         }
     }
 
@@ -161,6 +196,305 @@ PlasmaExtras.Representation {
         // line, which carries plenty of visual air — a largeSpacing on top of
         // that just stretched the popup with nothing in it.
         spacing: Kirigami.Units.smallSpacing
+
+        // ---- Running Claude Code sessions ----
+        // First thing under the heading: the sessions are what you act on, so
+        // they sit on top; the usage bars keep a fixed place at the bottom.
+        // Section hides entirely when no session windows exist.
+        RowLayout {
+            visible: root.sessions.length > 0
+            Layout.fillWidth: true
+            spacing: Kirigami.Units.smallSpacing
+
+            PlasmaComponents3.Label {
+                text: i18n("Sessions")
+                font.bold: true
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+                opacity: 0.85
+            }
+
+            PlasmaComponents3.Label {
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignRight
+                readonly property int attN: root.sessionsAttentionCount
+                readonly property int workN: root.sessionsWorkingCount
+                readonly property int idleN: root.sessions.length - attN - workN
+                text: {
+                    var parts = [];
+                    if (attN > 0)
+                        parts.push(i18n("%1 waiting", attN));
+                    if (workN > 0)
+                        parts.push(i18n("%1 working", workN));
+                    if (idleN > 0)
+                        parts.push(i18n("%1 idle", idleN));
+                    return parts.join(" · ");
+                }
+                opacity: 0.6
+                font.pointSize: Kirigami.Theme.smallFont.pointSize
+            }
+        }
+
+        ListView {
+            id: sessionsList
+            visible: root.sessions.length > 0
+            model: root.sessions
+            clip: true
+            spacing: Math.round(Kirigami.Units.smallSpacing / 2)
+
+            // Session list font: configurable family + point size (empty / 0
+            // = theme defaults). Row height follows the chosen font.
+            FontMetrics {
+                id: sessionsFm
+                font.family: plasmoid.configuration.sessionsFontFamily !== ""
+                             ? plasmoid.configuration.sessionsFontFamily
+                             : Kirigami.Theme.defaultFont.family
+                font.pointSize: plasmoid.configuration.sessionsFontSize > 0
+                                ? plasmoid.configuration.sessionsFontSize
+                                : Kirigami.Theme.defaultFont.pointSize
+            }
+
+            readonly property real rowHeight: Math.max(sessionsFm.height,
+                                                       Kirigami.Units.gridUnit)
+                                              + Kirigami.Units.smallSpacing * 2
+            readonly property bool overflowing: contentHeight > height + 1
+
+            // Natural size is the full list; the popup grows to fit it. Only
+            // when lockedHeight hits the screen cap does the layout shrink
+            // this view (fillHeight absorbs the shortfall, nothing else does)
+            // and scrolling takes over. Floor of 3 rows so the section can't
+            // collapse to nothing on very small screens.
+            implicitHeight: contentHeight
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Layout.preferredHeight: contentHeight
+            Layout.maximumHeight: contentHeight
+            Layout.minimumHeight: Math.min(contentHeight,
+                                           rowHeight * 3 + spacing * 2)
+
+            // Compact but always-visible scrollbar whenever the list scrolls;
+            // wheel scrolling is native to the ListView.
+            PlasmaComponents3.ScrollBar.vertical: PlasmaComponents3.ScrollBar {
+                policy: sessionsList.overflowing ? PlasmaComponents3.ScrollBar.AlwaysOn
+                                                 : PlasmaComponents3.ScrollBar.AlwaysOff
+            }
+
+            // MouseArea is the delegate root: it owns hover + row clicks, and
+            // the per-row ✕ ToolButton sits on top of it, eating its own
+            // clicks before they reach the row handler.
+            delegate: MouseArea {
+                id: sessionRow
+                required property var modelData
+
+                // attention: green + slow pulse (ready / waiting on you) ·
+                // working: orange (busy, no action needed) · idle: dim.
+                readonly property bool attention: modelData.state === "attention"
+                readonly property color stateColor: attention
+                    ? Kirigami.Theme.positiveTextColor
+                    : modelData.state === "working"
+                      ? Kirigami.Theme.neutralTextColor
+                      : Kirigami.Theme.disabledTextColor
+
+                width: sessionsList.width
+                height: sessionsList.rowHeight
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+
+                // Jump to that session's window; the popup has done its job,
+                // so dismiss it (and drop any pin) on the way out.
+                onClicked: {
+                    root.activateSession(modelData.row);
+                    root.pinned = false;
+                    root.popupHovered = false;
+                    root.compactHovered = false;
+                    root.expanded = false;
+                }
+
+                Rectangle {
+                    anchors.fill: parent
+                    // Keep the row (and its hover pill) clear of the scrollbar.
+                    anchors.rightMargin: sessionsList.overflowing
+                                         ? Kirigami.Units.smallSpacing * 2 : 0
+                    radius: 4
+                    color: sessionRow.containsMouse
+                           ? Qt.alpha(Kirigami.Theme.highlightColor, 0.15)
+                           : "transparent"
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.leftMargin: Kirigami.Units.smallSpacing
+                        anchors.rightMargin: Kirigami.Units.smallSpacing
+                        spacing: Kirigami.Units.smallSpacing * 2
+
+                        // Status dot + ring. The whole dot breathes gently
+                        // while a session waits on you (faster) or is working
+                        // (slower) — shallow fade, below "annoying" threshold.
+                        Item {
+                            id: dotWrap
+                            implicitWidth: 8
+                            implicitHeight: 8
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: 4
+                                color: sessionRow.stateColor
+                            }
+
+                            Rectangle {
+                                visible: sessionRow.modelData.state !== "idle"
+                                anchors.centerIn: parent
+                                width: 14
+                                height: 14
+                                radius: 7
+                                color: "transparent"
+                                border.width: 2
+                                border.color: Qt.alpha(sessionRow.stateColor, 0.35)
+                            }
+
+                            SequentialAnimation {
+                                running: sessionRow.modelData.state !== "idle"
+                                loops: Animation.Infinite
+                                onStopped: dotWrap.opacity = 1
+                                NumberAnimation {
+                                    target: dotWrap; property: "opacity"
+                                    to: 0.45
+                                    duration: sessionRow.attention ? 1400 : 2500
+                                    easing.type: Easing.InOutQuad
+                                }
+                                NumberAnimation {
+                                    target: dotWrap; property: "opacity"
+                                    to: 1.0
+                                    duration: sessionRow.attention ? 1400 : 2500
+                                    easing.type: Easing.InOutQuad
+                                }
+                            }
+                        }
+
+                        // Title in a clipping wrapper so the label can
+                        // free-run wider than the row and marquee-scroll on
+                        // hover (pattern lifted from plasma-taskbar-patches).
+                        Item {
+                            id: titleClip
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            clip: true
+
+                            PlasmaComponents3.Label {
+                                id: titleLabel
+
+                                readonly property real overflowPx:
+                                    Math.max(0, implicitWidth - titleClip.width)
+                                // Only marquee when it's worth it: if 80%+ of
+                                // the text is already visible, scrolling a few
+                                // px is more fidget than information — the
+                                // ellipsis stays.
+                                readonly property bool marqueeOn:
+                                    sessionRow.containsMouse
+                                    && titleClip.width < implicitWidth * 0.8
+
+                                anchors.verticalCenter: parent.verticalCenter
+                                // While scrolling the label takes its full text
+                                // width and the wrapper clips; at rest it fits
+                                // the wrapper and elides.
+                                width: marqueeOn ? implicitWidth : titleClip.width
+                                elide: marqueeOn ? Text.ElideNone : Text.ElideRight
+                                text: sessionRow.modelData.title
+                                opacity: sessionRow.modelData.state === "idle" ? 0.65 : 1.0
+                                font.family: sessionsFm.font.family
+                                font.pointSize: sessionsFm.font.pointSize
+
+                                // Hover marquee, instant start: scroll left at
+                                // 60px/s until the tail is flush, hold, snap
+                                // back, loop while hovered. Animates only x —
+                                // never a layout width — so it can't feed back
+                                // into sizing. Snaps home on hover exit.
+                                SequentialAnimation {
+                                    running: titleLabel.marqueeOn
+                                    loops: Animation.Infinite
+                                    onRunningChanged: if (!running) titleLabel.x = 0
+
+                                    PropertyAction { target: titleLabel; property: "x"; value: 0 }
+                                    NumberAnimation {
+                                        target: titleLabel
+                                        property: "x"
+                                        to: -titleLabel.overflowPx
+                                        duration: Math.max(1, Math.round(titleLabel.overflowPx / 60 * 1000))
+                                        easing.type: Easing.Linear
+                                    }
+                                    PauseAnimation { duration: 800 }
+                                    PropertyAction { target: titleLabel; property: "x"; value: 0 }
+                                    PauseAnimation { duration: 600 }
+                                }
+                            }
+                        }
+
+                        PlasmaComponents3.Label {
+                            id: statusLabel
+                            visible: sessionRow.modelData.state !== "idle"
+                            text: sessionRow.attention ? i18n("ready")
+                                                       : i18n("working")
+                            color: sessionRow.stateColor
+                            font.italic: true
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                            // "ready" pulses in step with the green dot
+                            // (same 1400ms rate); "working" sits faded and
+                            // static — its dot alone carries the "alive"
+                            // signal.
+                            opacity: sessionRow.attention ? 1.0 : 0.55
+
+                            SequentialAnimation {
+                                running: statusLabel.visible && sessionRow.attention
+                                loops: Animation.Infinite
+                                onStopped: statusLabel.opacity =
+                                               sessionRow.attention ? 1.0 : 0.55
+                                NumberAnimation {
+                                    target: statusLabel; property: "opacity"
+                                    to: 0.45; duration: 1400
+                                    easing.type: Easing.InOutQuad
+                                }
+                                NumberAnimation {
+                                    target: statusLabel; property: "opacity"
+                                    to: 1.0; duration: 1400
+                                    easing.type: Easing.InOutQuad
+                                }
+                            }
+                        }
+
+                        // Idle rows: how long the session has sat idle, in
+                        // the gray slot where active rows show their status
+                        // text. Hidden under a minute. tickSec drives the
+                        // refresh, so it stays current while the popup is
+                        // open.
+                        PlasmaComponents3.Label {
+                            visible: sessionRow.modelData.state === "idle"
+                                     && sessionRow.modelData.idleSince > 0
+                                     && root.tickSec - sessionRow.modelData.idleSince >= 60
+                            text: Utils.fmtIdle(root.tickSec - sessionRow.modelData.idleSince)
+                            color: Kirigami.Theme.disabledTextColor
+                            font.pointSize: Kirigami.Theme.smallFont.pointSize
+                        }
+
+                        // ✕, far right, hover-only: closes that session's
+                        // terminal window (KWin close request — the app can
+                        // still prompt/refuse; nothing is killed).
+                        PlasmaComponents3.ToolButton {
+                            visible: sessionRow.containsMouse
+                            icon.name: "window-close"
+                            text: i18n("Close session window")
+                            display: PlasmaComponents3.AbstractButton.IconOnly
+                            Layout.preferredHeight: sessionsList.rowHeight - 2
+                            Layout.preferredWidth: Layout.preferredHeight
+                            onClicked: root.closeSession(sessionRow.modelData.row)
+                        }
+                    }
+                }
+            }
+        }
+
+        Kirigami.Separator {
+            visible: root.sessions.length > 0
+            Layout.fillWidth: true
+            Layout.topMargin: Kirigami.Units.smallSpacing
+        }
 
         // Inline notice when showing cached values (token expired / offline).
         Kirigami.InlineMessage {

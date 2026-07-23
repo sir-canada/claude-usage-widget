@@ -4,6 +4,7 @@ import org.kde.kirigami as Kirigami
 import org.kde.plasma.plasmoid
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.components as PlasmaComponents3
+import org.kde.plasma.extras as PlasmaExtras
 import "utils.js" as Utils
 
 MouseArea {
@@ -19,6 +20,61 @@ MouseArea {
     Layout.minimumHeight: vertical ? column.implicitHeight + Kirigami.Units.smallSpacing : 0
 
     hoverEnabled: true
+    acceptedButtons: Qt.LeftButton | Qt.RightButton
+
+    // Right-click: the hover popup and a context menu can't coexist on
+    // Wayland (KDE bug 417939 family) — the menu joins the popup's grab
+    // chain and dies with it. Passing the event through to plasmashell can
+    // NEVER win the race: plasmashell builds its menu in the same event-loop
+    // iteration, while the popup's unmap happens on a later one. So the
+    // event is consumed here (plasmashell's menu never opens) and our own
+    // replica menu opens one beat later, after the popup is actually gone.
+    // Tradeoff, accepted: panel-level entries (Enter Edit Mode etc.) are not
+    // in the replica — Configure / Refresh / Remove are.
+    onPressed: (mouse) => {
+        if (mouse.button === Qt.RightButton) {
+            root.pinned = false;
+            root.popupHovered = false;
+            root.compactHovered = false;
+            // If the popup is up, wait out its unmap before showing the
+            // menu; if it isn't, open (nearly) immediately.
+            contextMenuTimer.interval = root.expanded ? 250 : 10;
+            root.expanded = false;
+            contextMenuTimer.restart();
+        }
+    }
+
+    Timer {
+        id: contextMenuTimer
+        onTriggered: contextMenu.openRelative()
+    }
+
+    // PlasmaExtras.Menu, NOT PlasmaComponents3.Menu: the QQC2 menu is an
+    // in-scene popup, so on a panel it renders *inside the panel window* —
+    // a 30px-tall strip showing one cramped item. PlasmaExtras.Menu is
+    // QMenu-backed (its own native window, same machinery as plasmashell's
+    // real context menus), so it sizes and places itself properly.
+    PlasmaExtras.Menu {
+        id: contextMenu
+        visualParent: compact
+
+        PlasmaExtras.MenuItem {
+            text: i18n("Refresh Now")
+            icon: "view-refresh"
+            onClicked: root.refresh()
+        }
+        PlasmaExtras.MenuItem {
+            text: i18n("Configure Claude Usage…")
+            icon: "configure"
+            onClicked: Plasmoid.internalAction("configure").trigger()
+        }
+        PlasmaExtras.MenuItem { separator: true }
+        PlasmaExtras.MenuItem {
+            text: i18n("Remove Widget")
+            icon: "edit-delete-remove"
+            onClicked: Plasmoid.internalAction("remove").trigger()
+        }
+    }
 
     // Hover opens the popup; moving away closes it after a
     // short grace period unless the pointer moved into the popup itself.

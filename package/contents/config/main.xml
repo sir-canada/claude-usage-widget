@@ -26,5 +26,15 @@
       <default>60</default>
       <min>15</min>
     </entry>
+    <entry name="sessionsFontFamily" type="String">
+      <label>Font family for the sessions list. Empty = theme default.</label>
+      <default></default>
+    </entry>
+    <entry name="sessionsFontSize" type="Int">
+      <label>Point size for the sessions list. 0 = theme default.</label>
+      <default>0</default>
+      <min>0</min>
+      <max>32</max>
+    </entry>
   </group>
 </kcfg>
